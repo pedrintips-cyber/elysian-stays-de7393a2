@@ -38,6 +38,7 @@ type PropertyPhoto = {
    const [property, setProperty] = useState<Property | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<PropertyPhoto[]>([]);
    const [loading, setLoading] = useState(true);
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
 
   const handleBack = () => {
     // If the user landed directly on this URL, there may be no SPA history to go back to.
@@ -85,12 +86,21 @@ type PropertyPhoto = {
 
   const galleryUrls = useMemo(() => {
     if (!property) return [] as string[];
-    const cover = property.image_url ? [property.image_url] : [];
+    const cover = property.image_url ? [property.image_url].filter(Boolean) : [];
     const extras = (albumPhotos ?? []).map((p) => p.url).filter(Boolean);
     // evita duplicar a capa caso ela também esteja no álbum
     const uniq = Array.from(new Set([...cover, ...extras]));
     return uniq.length ? uniq : cover;
   }, [property, albumPhotos]);
+
+  const handleImgError = (url: string) => {
+    setFailedUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  };
  
    if (loading) {
      return (
@@ -120,20 +130,28 @@ type PropertyPhoto = {
             opts={{ loop: true, align: "start" }}
           >
             <CarouselContent className="ml-0">
-              {(galleryUrls.length ? galleryUrls : [property.image_url]).map((url, idx) => (
+              {(galleryUrls.length ? galleryUrls : [property.image_url].filter(Boolean)).map((url, idx) => {
+                const effectiveUrl = failedUrls.has(url) ? property.image_url : url;
+                return (
                 <CarouselItem key={`${url}-${idx}`} className="pl-0">
                   <div className="h-[420px] w-full overflow-hidden bg-surface">
-                    <img
-                      src={url}
-                      alt={`${property.title} — foto ${idx + 1}`}
-                      loading={idx === 0 ? "eager" : "lazy"}
-                      decoding="async"
-                      fetchPriority={idx === 0 ? "high" : "auto"}
-                      className="h-full w-full object-contain"
-                    />
+                    {effectiveUrl ? (
+                      <img
+                        src={effectiveUrl}
+                        alt={`${property.title} — foto ${idx + 1}`}
+                        loading={idx === 0 ? "eager" : "lazy"}
+                        decoding="async"
+                        fetchPriority={idx === 0 ? "high" : "auto"}
+                        className="h-full w-full object-contain"
+                        onError={() => handleImgError(url)}
+                      />
+                    ) : (
+                      <div className="h-full w-full" />
+                    )}
                   </div>
                 </CarouselItem>
-              ))}
+                );
+              })}
             </CarouselContent>
 
             {/* Setas (visíveis no mobile) */}

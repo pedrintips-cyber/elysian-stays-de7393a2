@@ -145,10 +145,14 @@ export default function Reservations() {
     });
 
     if (payErr || !payData?.ok) {
+      const message =
+        (payData as any)?.userMessage ??
+        (payData as any)?.error ??
+        "Não conseguimos gerar o PIX agora. Tente novamente.";
       toast({
         variant: "destructive",
         title: "Erro ao gerar PIX",
-        description: "Não conseguimos gerar o PIX agora. Tente novamente.",
+        description: message,
       });
       setPixOpen(false);
       return;

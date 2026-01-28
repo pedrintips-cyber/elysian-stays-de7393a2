@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 type CreatePixRequest = {
@@ -28,6 +28,27 @@ function json(data: unknown, init: ResponseInit = {}) {
       ...(init.headers ?? {}),
     },
   });
+}
+
+function extractProviderUserMessage(rawJson: unknown): string | null {
+  try {
+    const obj = rawJson as any;
+    const msg =
+      obj?.error_messages?.[0]?.message ??
+      obj?.message ??
+      obj?.error ??
+      obj?.details?.[0]?.message ??
+      null;
+
+    if (typeof msg !== "string" || !msg.trim()) return null;
+    // Normalize common provider errors into user-friendly PT-BR.
+    if (/Amount above maximum for PIX/i.test(msg) || /maximum for PIX/i.test(msg)) {
+      return "O valor total passou do limite do PIX (máx. R$ 1.500,00). Reduza a quantidade de diárias ou escolha outra forma de pagamento.";
+    }
+    return msg;
+  } catch {
+    return null;
+  }
 }
 
 function badRequest(message: string) {
@@ -201,6 +222,8 @@ Deno.serve(async (req) => {
     if (!huraRes.ok) {
       console.error("Hura create transaction failed", { status: huraRes.status, rawJson });
 
+      const userMessage = extractProviderUserMessage(rawJson);
+
       // Persist failure for later diagnosis + mark booking as payment_failed
       await supabase
         .from("payment_transactions")
@@ -218,9 +241,15 @@ Deno.serve(async (req) => {
         .update({ payment_status: "payment_failed" })
         .eq("id", body.bookingId);
 
+      // Return 200 so the web client can read `data` and show a good message.
       return json(
-        { ok: false, error: "Falha ao criar transação.", details: rawJson },
-        { status: 502 },
+        {
+          ok: false,
+          error: "Falha ao criar transação.",
+          userMessage: userMessage ?? "Não foi possível gerar o PIX agora. Tente novamente.",
+          details: rawJson,
+        },
+        { status: 200 },
       );
     }
 

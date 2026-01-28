@@ -159,10 +159,14 @@ import { useEffect, useState } from "react";
 
       if (payErr || !payData?.ok) {
         console.error("Erro ao criar transação PIX:", payErr, payData);
+        const message =
+          (payData as any)?.userMessage ??
+          (payData as any)?.error ??
+          "A reserva foi criada, mas não conseguimos gerar o PIX agora. Tente novamente.";
         toast({
           variant: "destructive",
           title: "Erro ao gerar PIX",
-          description: "A reserva foi criada, mas não conseguimos gerar o PIX agora. Tente novamente.",
+          description: message,
         });
         setPixOpen(false);
         return;
